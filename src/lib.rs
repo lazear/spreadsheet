@@ -1,4 +1,5 @@
-///! Spreadsheet utilities for tab-separated files
+
+//! Spreadsheet utilities for tab or comma delimited files
 
 extern crate core;
 use std::io::*;
@@ -6,27 +7,39 @@ use std::fs::File;
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
+/// Represents a single cell in a spreadsheet
+///
+/// Three data types are represented: text, floats, and integers
 pub enum Cell {
+    /// Text cell
     String(String),
+    /// Floating point number
     Float(f32),
+    /// Integer value
     Integer(i32),
+    /// No value
     Empty,
 }
 
 /// Spreadsheet struct
 pub struct Spreadsheet {
+    /// Vector of cells representing the first row
+    /// in the spreadsheet
     pub headers: Vec<Cell>,
+    /// Number of rows, not counting header
     pub rows: usize,
+    /// Number of columns
     pub cols: usize,
+    /// Matrix of cells representing the spreadsheet data
     pub data: Vec<Vec<Cell>>,
 }
 
 impl core::ops::Index<String> for Spreadsheet {
-        type Output = Vec<Cell>;
+    type Output = Vec<Cell>;
     fn index(&self, index: String) -> &Vec<Cell> {
         let m = Cell::String(index);
         for row in self.data.iter() {
-            if let Some(val) = row.iter().find(|&cell| *cell == m) {
+            if let Some(_) = row.iter().find(|&cell| *cell == m) {
                 return row;
             }
         }
@@ -48,6 +61,18 @@ impl core::ops::IndexMut<usize> for Spreadsheet {
 }
 
 impl Spreadsheet {
+    
+    /// Read from a file into a struct Spreadsheet, returning a Result<Spreadsheet>
+    /// 
+    /// # Arguments
+    /// * `filename`: A string representing a file path
+    /// * `delimiter`: A character to delimit cells, i.e. '\t' or ','
+    /// 
+    /// # Example
+    ///
+    /// ```
+    /// let s = Spreadsheet::read("table.tsv", '\t').unwrap();
+    /// ```
     pub fn read(filename: &str, delimiter: char) -> Result<Spreadsheet> {
         let mut data: Vec<Vec<Cell>> = Vec::new();
         let mut headers: Vec<Cell> = Vec::new();
@@ -104,13 +129,13 @@ impl Spreadsheet {
     }  
 
     /// Write the spreadsheet to a tab-separated file, consuming the 
-    /// spreadsheet in the process
+    /// Spreadsheet in the process
     pub fn write(self, filename: &str) -> Result<()> {
         let mut writer = BufWriter::new(File::create(filename)?);
 
         // write the headers first
         for cell in self.headers {
-            write!(writer, "{}\t", 
+            writeln!(writer, "{}\t", 
                 match cell {
                     Cell::Float(f) => f.to_string(),
                     Cell::Integer(x) => x.to_string(),
@@ -122,9 +147,8 @@ impl Spreadsheet {
 
         // iter through each row in the spreadsheet
         for row in self.data {
-            write!(writer, "\n")?;
             for cell in row {
-                write!(writer, "{}\t", 
+                writeln!(writer, "{}\t", 
                     match cell {
                         Cell::Float(f) => f.to_string(),
                         Cell::Integer(x) => x.to_string(),
