@@ -1,10 +1,11 @@
 ///! Spreadsheet utilities for tab-separated files
 
+extern crate core;
 use std::io::*;
 use std::fs::File;
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Cell {
     String(String),
     Float(f32),
@@ -18,6 +19,32 @@ pub struct Spreadsheet {
     pub rows: usize,
     pub cols: usize,
     pub data: Vec<Vec<Cell>>,
+}
+
+impl core::ops::Index<String> for Spreadsheet {
+        type Output = Vec<Cell>;
+    fn index(&self, index: String) -> &Vec<Cell> {
+        let m = Cell::String(index);
+        for row in self.data.iter() {
+            if let Some(val) = row.iter().find(|&cell| *cell == m) {
+                return row;
+            }
+        }
+        panic!("Value not found in spreadsheet");
+    }
+}
+
+impl core::ops::Index<usize> for Spreadsheet {
+    type Output = Vec<Cell>;
+    fn index(&self, index: usize) -> &Vec<Cell> {
+        self.data.get(index).unwrap()
+    }
+}
+
+impl core::ops::IndexMut<usize> for Spreadsheet {
+    fn index_mut(&mut self, index: usize) -> &mut Vec<Cell> {
+        self.data.get_mut(index).unwrap()
+    }
 }
 
 impl Spreadsheet {
