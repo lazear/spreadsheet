@@ -122,9 +122,9 @@ impl Spreadsheet {
 
         Ok(Spreadsheet {
             rows: data.len(),
-            headers,
-            data,     
-            cols,
+            headers: headers,
+            data: data,     
+            cols: cols,
         })
     }  
 
