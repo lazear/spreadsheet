@@ -31,24 +31,32 @@ pub struct Spreadsheet {
     pub cols: usize,
     /// Matrix of cells representing the spreadsheet data
     pub data: Vec<Cell>,
+
+    delimiter: char,
 }
 
+/// Index into a [`Spreadsheet`] by row and column number
 pub struct NumericIndex {
     row: usize,
     col: usize,
 }
 
+/// Index into a [`Spreadsheet`] by row and column name, which must match
+/// one of the headers
+///
+/// # Panics
+///
+/// Will panic if `col` is not in the headers of the [`Spreadsheet`], or
+/// if the [`Spreadsheet`] does not have headers
 pub struct SymbolicIndex<'s> {
     row: usize,
     col: &'s str,
 }
 
 impl<'s> SymbolicIndex<'s> {
+    /// Create a new [`SymbolicIndex`]
     pub fn new(row: usize, col: &'s str) -> SymbolicIndex<'s> {
-        SymbolicIndex {
-            row,
-            col
-        }
+        SymbolicIndex { row, col }
     }
 }
 
@@ -82,27 +90,6 @@ impl<'s> core::ops::Index<SymbolicIndex<'s>> for Spreadsheet {
     }
 }
 
-// impl<'a> core::ops::Index<String> for &'a Spreadsheet {
-//     type Output = Iter<'a>;
-//     fn index(&self, index: String) -> &Iter<'a> {
-//         let idx = self.headers.iter().position(|i| i == &index).unwrap();
-//         self.iter(idx, Direction::Column)
-//     }
-// }
-
-// impl core::ops::Index<usize> for Spreadsheet {
-//     type Output = Vec<Cell>;
-//     fn index(&self, index: usize) -> &Vec<Cell> {
-//         self.data.get(index).unwrap()
-//     }
-// }
-
-// impl core::ops::IndexMut<usize> for Spreadsheet {
-//     fn index_mut(&mut self, index: usize) -> &mut Vec<Cell> {
-//         self.data.get_mut(index).unwrap()
-//     }
-// }
-
 impl Spreadsheet {
     /// Read from a file into a struct Spreadsheet, returning a Result<Spreadsheet>
     ///
@@ -113,7 +100,9 @@ impl Spreadsheet {
     /// # Example
     ///
     /// ```
-    /// let s = Spreadsheet::read("table.tsv", '\t').unwrap();
+    /// use spreadsheet::Spreadsheet;
+    ///
+    /// let s = Spreadsheet::read("./test.csv", '\t').unwrap();
     /// ```
     pub fn read(filename: &str, delimiter: char) -> Result<Spreadsheet> {
         let mut data: Vec<Cell> = Vec::new();
@@ -151,6 +140,7 @@ impl Spreadsheet {
             data,
             cols,
             rows,
+            delimiter,
         })
     }
 
@@ -164,8 +154,7 @@ impl Spreadsheet {
 
     pub fn iter_cols(&self) -> ColIter<'_> {
         ColIter {
-            data: &self.data,
-            rows: self.rows,
+            data: &self,
             cols: self.cols,
             pos: 0,
         }
@@ -188,6 +177,11 @@ impl Spreadsheet {
                 cols: self.cols,
             },
         }
+    }
+
+    pub fn column(&self, col: &str) -> Option<Iter<'_>> {
+        let idx = self.headers.iter().position(|i| i == col)?;
+        Some(self.iter(idx, Direction::Column))
     }
 }
 
@@ -212,27 +206,24 @@ impl<'a> Iterator for RowIter<'a> {
     }
 }
 
-/// Immutable iterator over the columns in a [`Spreadsheet`]
-///
-/// # Note
-///
-/// [`ColIter`] allocates additional heap memory
+/// Immutable iterator over the columns in a [`Spreadsheet`].
+/// Each column is returned as an [`Iter`] over the elements in that column.
 pub struct ColIter<'a> {
-    data: &'a [Cell],
+    data: &'a Spreadsheet,
     cols: usize,
-    rows: usize,
     pos: usize,
 }
 
 impl<'a> Iterator for ColIter<'a> {
-    type Item = Vec<&'a Cell>;
+    type Item = Iter<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        let mut vec = Vec::new();
-        for r in 0..self.rows {
-            vec.push(self.data.get(r * self.cols + self.pos)?);
+        if self.pos < self.cols {
+            let iter = self.data.iter(self.pos, Direction::Column);
+            self.pos += 1;
+            Some(iter)
+        } else {
+            None
         }
-        self.pos += 1;
-        Some(vec)
     }
 }
 
@@ -274,26 +265,11 @@ impl<'a> Iterator for Iter<'a> {
                 cell
             }
         }
-        // let r = match self.dir {
-        //     Direction::Column => self.pos,
-        //     Direction::Row => self.pos * self.cols;
-        // }
-        // dbg!(r);
-        // if r < self.data.len() {
-        //     let cell = self.data.get(r);
-        //     self.pos += match self.dir {
-        //         Direction::Column => self.cols,
-        //         Direction::Row => 1,
-        //     };
-        //     cell
-        // } else {
-        //     None
-        // }
     }
 }
 
-/// Write the spreadsheet to a tab-separated file, consuming the
-/// Spreadsheet in the process
+// Write the spreadsheet to a tab-separated file, consuming the
+// Spreadsheet in the process
 // pub fn write(self, filename: &str) -> Result<()> {
 //     let mut writer = BufWriter::new(File::create(filename)?);
 
@@ -325,79 +301,3 @@ impl<'a> Iterator for Iter<'a> {
 //     // Return an empty unit Ok
 //     Ok(())
 // }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn rowiter() {
-        let spread = Spreadsheet::read("test.tsv", ',').unwrap();
-        let rows = spread
-            .iter_rows()
-            .map(Vec::from)
-            .collect::<Vec<Vec<Cell>>>();
-        assert_eq!(rows.len(), spread.rows);
-        assert_eq!(
-            rows[0],
-            vec![Cell::Integer(0), Cell::Integer(1), Cell::Integer(2)]
-        );
-        assert_eq!(
-            rows[1],
-            vec![Cell::Integer(3), Cell::Integer(4), Cell::Integer(5)]
-        );
-    }
-
-    #[test]
-    fn coliter() {
-        let spread = Spreadsheet::read("test.tsv", ',').unwrap();
-        let cols = spread.iter_cols().collect::<Vec<Vec<&Cell>>>();
-        assert_eq!(cols.len(), spread.cols);
-        assert_eq!(
-            cols[0],
-            vec![
-                &Cell::Integer(0),
-                &Cell::Integer(3),
-                &Cell::Integer(6),
-                &Cell::Integer(9)
-            ]
-        );
-        assert_eq!(
-            cols[1],
-            vec![
-                &Cell::Integer(1),
-                &Cell::Integer(4),
-                &Cell::Integer(7),
-                &Cell::Integer(10)
-            ]
-        );
-    }
-
-    #[test]
-    fn iter() {
-        let spread = Spreadsheet::read("test.tsv", ',').unwrap();
-
-        let cells = spread.iter(1, Direction::Column).collect::<Vec<_>>();
-        let expected = vec![
-            &Cell::Integer(1),
-            &Cell::Integer(4),
-            &Cell::Integer(7),
-            &Cell::Integer(10),
-        ];
-        assert_eq!(cells, expected);
-
-        let cells = spread.iter(1, Direction::Row).collect::<Vec<_>>();
-        let expected = vec![
-            &Cell::Integer(3),
-            &Cell::Integer(4),
-            &Cell::Integer(5),
-        ];
-        assert_eq!(cells, expected);
-    }
-
-    #[test]
-    fn index() {
-        let spread = Spreadsheet::read("test.tsv", ',').unwrap();
-        assert_eq!(spread[SymbolicIndex::new(0, "x")], Cell::Integer(0));
-
-    }
-}
