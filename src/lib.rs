@@ -1,23 +1,19 @@
 //! Spreadsheet utilities for tab or comma delimited files
 
-extern crate core;
 use std::fs::File;
 use std::io::*;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 /// Represents a single cell in a spreadsheet
 ///
 /// Three data types are represented: text, floats, and integers
 pub enum Cell {
     /// Text cell
-    String(String),
+    Text(String),
     /// Floating point number
-    Float(f32),
+    Float(f64),
     /// Integer value
-    Integer(i32),
-    /// No value
-    Empty,
+    Integer(i64),
 }
 
 /// Spreadsheet struct
@@ -60,14 +56,14 @@ impl<'s> SymbolicIndex<'s> {
     }
 }
 
-impl<'a> core::ops::Index<NumericIndex> for &'a Spreadsheet {
+impl<'a> std::ops::Index<NumericIndex> for &'a Spreadsheet {
     type Output = Cell;
     fn index(&self, index: NumericIndex) -> &Self::Output {
         &self.data[index.row * self.cols + index.col]
     }
 }
 
-impl<'a, 's> core::ops::Index<SymbolicIndex<'s>> for &'a Spreadsheet {
+impl<'a, 's> std::ops::Index<SymbolicIndex<'s>> for &'a Spreadsheet {
     type Output = Cell;
     fn index(&self, index: SymbolicIndex) -> &Self::Output {
         let c = self.headers.iter().position(|i| i == index.col).unwrap();
@@ -75,14 +71,14 @@ impl<'a, 's> core::ops::Index<SymbolicIndex<'s>> for &'a Spreadsheet {
     }
 }
 
-impl core::ops::Index<NumericIndex> for Spreadsheet {
+impl std::ops::Index<NumericIndex> for Spreadsheet {
     type Output = Cell;
     fn index(&self, index: NumericIndex) -> &Self::Output {
         &self.data[index.row * self.cols + index.col]
     }
 }
 
-impl<'s> core::ops::Index<SymbolicIndex<'s>> for Spreadsheet {
+impl<'s> std::ops::Index<SymbolicIndex<'s>> for Spreadsheet {
     type Output = Cell;
     fn index(&self, index: SymbolicIndex) -> &Self::Output {
         let c = self.headers.iter().position(|i| i == index.col).unwrap();
@@ -118,12 +114,12 @@ impl Spreadsheet {
         while let Some(Ok(cells)) = contents.next() {
             let mut new_line: Vec<Cell> = Vec::new();
             for cell in cells.split(delimiter) {
-                if let Ok(x) = cell.parse::<i32>() {
+                if let Ok(x) = cell.parse::<i64>() {
                     new_line.push(Cell::Integer(x));
-                } else if let Ok(x) = cell.parse::<f32>() {
+                } else if let Ok(x) = cell.parse::<f64>() {
                     new_line.push(Cell::Float(x));
                 } else if let Ok(x) = cell.parse::<String>() {
-                    new_line.push(Cell::String(x));
+                    new_line.push(Cell::Text(x));
                 } else {
                     return Err(Error::from(ErrorKind::UnexpectedEof));
                 }
@@ -144,16 +140,16 @@ impl Spreadsheet {
         })
     }
 
-    pub fn iter_rows(&self) -> RowIter<'_> {
-        RowIter {
+    pub fn iter_rows(&self) -> Row<'_> {
+        Row {
             data: &self.data,
             cols: self.cols,
             pos: 0,
         }
     }
 
-    pub fn iter_cols(&self) -> ColIter<'_> {
-        ColIter {
+    pub fn iter_cols(&self) -> Column<'_> {
+        Column {
             data: &self,
             cols: self.cols,
             pos: 0,
@@ -186,13 +182,13 @@ impl Spreadsheet {
 }
 
 /// An immutable iterator over rows in the [`Spreadsheet`]
-pub struct RowIter<'a> {
+pub struct Row<'a> {
     data: &'a [Cell],
     cols: usize,
     pos: usize,
 }
 
-impl<'a> Iterator for RowIter<'a> {
+impl<'a> Iterator for Row<'a> {
     type Item = &'a [Cell];
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.pos * self.cols;
@@ -208,13 +204,13 @@ impl<'a> Iterator for RowIter<'a> {
 
 /// Immutable iterator over the columns in a [`Spreadsheet`].
 /// Each column is returned as an [`Iter`] over the elements in that column.
-pub struct ColIter<'a> {
+pub struct Column<'a> {
     data: &'a Spreadsheet,
     cols: usize,
     pos: usize,
 }
 
-impl<'a> Iterator for ColIter<'a> {
+impl<'a> Iterator for Column<'a> {
     type Item = Iter<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos < self.cols {
